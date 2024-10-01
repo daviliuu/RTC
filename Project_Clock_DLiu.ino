@@ -62,22 +62,16 @@ void setup() {
   pinMode(speakerPin, OUTPUT);
   Serial.begin(9600);
   lcd.begin(lcdCols, lcdRows);
-  getTemp();
+  getTemperature();
   displayMain();
 }
 
 void loop() {
   updateTimeTemp();
   handleButtonInput();
-  alarm();
+  checkAlarm();
 }
 
-// Temperature
-void getTemp() {
-  double voltage = (analogRead(temperatureSensor) / 1023.0);
-  double temp = ((voltage * 5) - 0.5) * 100;
-  celcius = int(round(temp));
-}
 
 // Updates the time every minute, adding a minute or setting the next hour
 // Updates the temperature reading
@@ -89,7 +83,7 @@ void updateTimeTemp() {
   if (currentTime - lastRecordedTime >= 60000) {
     if (minute == 59) {
       minute = 0;
-      updateHour();
+      hour += 1;
     }
     else {
       minute += 1;
@@ -99,30 +93,28 @@ void updateTimeTemp() {
     minute %= 60;
 
     lastRecordedTime = currentTime;
-    getTemp();
+    getTemperature();
     // Ensures alarms set before the current time do not ring until it reaches that time
     if (setAfterTime) {
       setAfterTime = !(hour == 23 && minute == 59);
     }
-    soundAlarm = hour >= alarmHour && minute >= alarmMin && alarmHour != -1 && alarmMin != -1 && !setAfterTime;
     if (displayMode == 0) {
       displayMain();
     }
   }
 }
 
-// Updates the hour by incrementing it or resetting it to zero
-void updateHour() {
-  if (hour > 24) {
-    hour = 0;
-  }
-  else {
-    hour += 1;
-  }
+// Reads the temperature from the TMP36 Temperature Sensor
+void getTemperature() {
+  double voltage = (analogRead(temperatureSensor) / 1023.0);
+  double temp = ((voltage * 5) - 0.5) * 100;
+  celcius = int(round(temp));
 }
 
 // Makes tone to speaker when its time for the alarm
-void alarm() {
+void checkAlarm() {
+  soundAlarm = hour >= alarmHour && minute >= alarmMin && alarmHour != -1 && alarmMin != -1 && !setAfterTime;
+
   if (soundAlarm && millis() % 2000 == 0) {
     tone(speakerPin, 432, 1000);
   }
@@ -150,6 +142,10 @@ void handleButtonInput() {
 }
 
 // Handles the functions of the yellow button
+// 0 : Main - Changes to Settings Menu
+// 1 : Settings - Changes to Main Menu
+// 2 : Time Setting - Moves Cursor Left
+// 3 : Options - Changes to Settings Menu
 void handleYellowButton() {
   if (displayMode == 1) {
     displayMain();
@@ -169,6 +165,7 @@ void handleYellowButton() {
   }
 }
 
+// Green Button Functions
 // 0 : Main - Snooze Alarm for 5 Minutes
 // 1 : Settings - Moves Cursor Downward
 // 2 : Time Setting - Increases Time
@@ -200,7 +197,7 @@ void handleGreenButton() {
   }
 }
 
-// Todo: Add scrolling back (0 -> 9 or 2 or 5);
+// Red Button Functions
 // 0 : Main - N/A
 // 1 : Settings - Moves Cursor Upward
 // 2 : Time Setting - Decreases Time
@@ -227,11 +224,12 @@ void handleRedButton() {
   }
 }
 
+// Blue Button Functions
+// 0 : Main - Removes Alarm
+// 1 : Settings - Selects Highlighted Option
+// 2 : Time Setting - Step Next or Finish
+// 3 : Options - Enable or Disable
 void handleBlueButton() {
-  // 0 (Main Menu): Turns off alarm
-  // 1 (Settings Menu): Selects Menu
-  // 2 Time Setting: (Step Next Setting / Finish)
-  // 3 Other Settings: (Turn On/Off) 
   if (displayMode == 0) {
     soundAlarm = false;
     alarmHour = -1;
@@ -273,6 +271,7 @@ void handleBlueButton() {
 
 // Display Functions
 // Main
+// Displays the Main Menu with Time, Temperature, and the Alarm (if any)
 void displayMain() {
   displayMode = 0;
   lcd.clear();
@@ -296,6 +295,7 @@ void displayMain() {
 }
 
 // Settings
+// Displays the Settings Menu where options can be selected and an alarm/timer can be set
 void displaySettings() {
   displayMode = 1;
   lcd.clear();
@@ -320,6 +320,7 @@ void displaySettings() {
 
 // Time Setting
 // Uses setting cursor to determine which type of menu to open
+// Allows the user to set the time, an alarm, or a timer
 void displayTimeSet() {  
   displayMode = 2;
   int cursorLine = 1;
@@ -405,6 +406,9 @@ void displayOptions() {
 
 
 // Helpers
+// Given an hour and minute, displays the time in:
+// 12 Hour Format: (XX:XX am/pm)
+// 24 Hour Format: (XX:XX)
 String formatTime(int hour, int minute) {
   String timeOutput;
   
@@ -429,6 +433,10 @@ String formatTime(int hour, int minute) {
   return timeOutput;
 }
 
+// Fills the tens digit if none is present:
+// 7 -> 07
+// 8 -> 08
+// 10 -> 10 (does nothing)
 String fillTime(int num) {
   String time = "";
 
@@ -442,6 +450,9 @@ String fillTime(int num) {
   return time;
 }
 
+// Creates a String given two strings such that a gap is between them
+// "A", "B" -> "A               B"
+// Used specifically for lcd display (replace lcdCols to re-use)
 String fillGap(String first, String second) {
   String gap = "";
   
@@ -452,6 +463,10 @@ String fillGap(String first, String second) {
   return first + gap + second;
 }
 
+// Increments inCursor by amount
+// If the result is skip, increments again
+// 1, 3, 1 => 2
+// 1, 2, 1 => 3 (Skips 2)
 int incrementSkip(int& inCursor, int skip, int amount) {
   inCursor += amount;
   if (inCursor == skip) {
@@ -459,7 +474,7 @@ int incrementSkip(int& inCursor, int skip, int amount) {
   }
 }
 
-// Corrects time created by time cursor
+// Corrects time created by time cursor by setting the invalid value to 0
 void correctTimer() {
   // Ensuring time is allowable at timeCursor =
   // 0: Tens place of hour    (2)3:59
@@ -480,6 +495,8 @@ void correctTimer() {
   }
 }
 
+// If "Set Time" is chosen, sets the system time to the given time
+// Otherwise, creates an alarm given the data inputted in the time setting menu
 void finalizeTimeSet() {
   // 1 : Time
   // 2 : Alarm
@@ -488,6 +505,7 @@ void finalizeTimeSet() {
   if (settingsCursor == 1) {
     hour = timerTime[0] * 10 + timerTime[1];
     minute = timerTime[2] * 10 + timerTime[3];
+    lastRecordedTime = millis();
 
     if (alarmHour > hour || alarmHour == hour && alarmMin >= minute) {
       setAfterTime = false;
@@ -513,22 +531,26 @@ void resetTimer() {
   }
 }
 
-
+// Sets an alarm given the hour and minute of the alarm
+// Sets a timer if boolean alarm is false
 void setAlarm(int timeHour, int timeMin, boolean alarm) {
   if (alarm) {
     alarmHour = timeHour;
     alarmMin = timeMin;
   }
   else {
+    alarmHour = hour;
+    alarmMin = minute;
     addToAlarm(timeHour, timeMin);
   }
 
   setAfterTime = alarmHour < hour || (alarmHour == hour && alarmMin < minute);
 }
 
+// Adds more time to an active alarm
 void addToAlarm(int addHour, int addMinute) {
     alarmHour += addHour;
-    alarmMin += 5;
+    alarmMin += addMinute;
     if (alarmMin > 59) {
       alarmMin -= 60;
       alarmHour += 1;
